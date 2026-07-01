@@ -17,6 +17,40 @@ export const SearchFiltersSchema = z
 	})
 	.or(z.record(z.unknown()))
 
+// A single metadata filter condition (leaf node of a filter tree).
+export const FilterConditionSchema = z
+	.object({
+		key: z.string(),
+		value: z.union([z.string(), z.number(), z.boolean()]).optional(),
+		negate: z.boolean().optional(),
+		filterType: z
+			.enum(["string_contains", "numeric", "array_contains"])
+			.optional(),
+		numericOperator: z.enum(["=", "!=", ">", ">=", "<", "<="]).optional(),
+		ignoreCase: z.boolean().optional(),
+	})
+	// Allow additional/undocumented keys so validation never rejects a filter
+	// the backend still understands.
+	.passthrough()
+
+export type MetadataFilter =
+	| z.infer<typeof FilterConditionSchema>
+	| { AND: MetadataFilter[] }
+	| { OR: MetadataFilter[] }
+
+// Recursive schema describing a metadata filter tree: `AND`/`OR` groups that
+// nest arbitrarily and bottom out in `FilterConditionSchema` leaf conditions.
+// Used to validate the JSON-encoded `filters` query parameter. Kept out of the
+// OpenAPI document paths (it is only used for runtime validation) so the lazy
+// recursion does not need a ref.
+export const MetadataFilterSchema: z.ZodType<MetadataFilter> = z.lazy(() =>
+	z.union([
+		z.object({ AND: z.array(MetadataFilterSchema) }).passthrough(),
+		z.object({ OR: z.array(MetadataFilterSchema) }).passthrough(),
+		FilterConditionSchema,
+	]),
+)
+
 const exampleMetadata: Record<string, string | number | boolean> = {
 	category: "technology",
 	isPublic: true,
@@ -247,12 +281,28 @@ export const ListMemoriesQuerySchema = z
 					"Optional tags this memory should be containerized by. This can be an ID for your user, a project ID, or any other identifier you wish to use to group memories.",
 				example: ["user_123", "project_123"],
 			}),
-		// TODO: Improve filter schema
 		filters: z
 			.string()
 			.optional()
+			.refine(
+				(raw) => {
+					if (raw === undefined) return true
+					let parsed: unknown
+					try {
+						parsed = JSON.parse(raw)
+					} catch {
+						return false
+					}
+					return MetadataFilterSchema.safeParse(parsed).success
+				},
+				{
+					message:
+						"filters must be a JSON-encoded metadata filter: AND/OR groups of conditions (each with a `key`).",
+				},
+			)
 			.openapi({
-				description: "Optional filters to apply to the search",
+				description:
+					"Optional JSON-encoded metadata filters to apply. Wrap conditions in `AND`/`OR` groups; each condition needs a `key` and typically a `value`.",
 				example: JSON.stringify({
 					AND: [
 						{
