@@ -1,4 +1,4 @@
-<p align="center">
+DELETE EVERYTHING   <p align="center">
   <picture>
     <source srcset="apps/web/public/logo-fullmark.svg" media="(prefers-color-scheme: dark)">
     <source srcset="apps/web/public/logo-light-fullmark.svg" media="(prefers-color-scheme: light)">
