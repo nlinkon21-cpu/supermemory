@@ -17,7 +17,6 @@
   "workspaces": [
     "apps/*",
     "!apps/raycast-extension",
-    "!tools/test/chatapp",
     "packages/*"
   ],
   "dependencies": {
